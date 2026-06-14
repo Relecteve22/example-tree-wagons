@@ -1,0 +1,145 @@
+.tree-diagram {
+  --node-green: #3d8b40;
+  --node-green-bg: #f6fff6;
+  --node-green-active: #2e6b31;
+  --list-blue: #2f6fb3;
+  --list-blue-bg: #f7fbff;
+  --connector: #c9a66b;
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  padding: 32px 20px 48px;
+  box-sizing: border-box;
+}
+
+.tree-edges {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 0;
+}
+
+.tree-edge {
+  fill: none;
+  stroke: var(--connector);
+  stroke-width: 2;
+}
+
+.tree-level-block {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.tree-level-block--list {
+  align-items: flex-start;
+  width: min(420px, calc(100% - 24px));
+}
+
+.tree-level {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 16px 20px;
+  width: 100%;
+  padding: 8px 0 28px;
+}
+
+.tree-node {
+  max-width: 220px;
+  padding: 10px 14px;
+  border: 1.5px solid var(--node-green);
+  border-radius: 4px;
+  background: var(--node-green-bg);
+  color: var(--node-green);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.35;
+  text-align: center;
+  cursor: default;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.tree-node--clickable {
+  cursor: pointer;
+}
+
+.tree-node--clickable:hover {
+  background: #eaf8ea;
+  border-color: var(--node-green-active);
+}
+
+.tree-node--expanded {
+  background: #e2f3e2;
+  border-color: var(--node-green-active);
+  color: var(--node-green-active);
+  font-weight: 500;
+}
+
+.tree-node--empty {
+  opacity: 0.55;
+}
+
+.tree-node:focus-visible {
+  outline: 2px solid var(--node-green);
+  outline-offset: 2px;
+}
+
+.item-list-box {
+  width: 100%;
+  border: 1.5px solid var(--list-blue);
+  border-radius: 4px;
+  background: var(--list-blue-bg);
+  padding: 14px 16px 16px;
+  box-sizing: border-box;
+}
+
+.item-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.item-list__row {
+  width: 100%;
+  text-align: left;
+  padding: 4px 0;
+}
+
+.item-list__label {
+  color: var(--list-blue);
+  font-size: 14px;
+  line-height: 1.35;
+  text-align: left;
+}
+
+@media (max-width: 768px) {
+  .tree-diagram {
+    padding: 20px 12px 32px;
+  }
+
+  .tree-node {
+    max-width: 100%;
+    font-size: 13px;
+  }
+
+  .tree-level-block--list {
+    max-width: 100%;
+  }
+}

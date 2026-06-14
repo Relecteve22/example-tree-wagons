@@ -1,0 +1,12 @@
+.tree-zoom-viewport {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow: auto;
+  cursor: default;
+}
+
+.tree-zoom-viewport__content {
+  transform-origin: center top;
+  width: 100%;
+}
