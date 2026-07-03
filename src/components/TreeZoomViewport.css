@@ -2,11 +2,14 @@
   flex: 1;
   min-height: 0;
   width: 100%;
-  overflow: auto;
-  cursor: default;
+  overflow: hidden;
+}
+
+.tree-zoom-viewport--panning {
+  user-select: none;
 }
 
 .tree-zoom-viewport__content {
-  transform-origin: center top;
+  transform-origin: 0 0;
   width: 100%;
 }

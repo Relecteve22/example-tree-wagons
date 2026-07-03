@@ -4,13 +4,30 @@ function makeId(path: number[]): string {
   return path.join('-')
 }
 
+function getChildLabels(
+  label: string,
+  parentLabel: string | undefined,
+  childrenMap: ChildrenMap,
+): readonly string[] | undefined {
+  if (parentLabel) {
+    const scopedKey = `${parentLabel}|${label}`
+    const scopedChildren = childrenMap[scopedKey]
+    if (scopedChildren?.length) {
+      return scopedChildren
+    }
+  }
+
+  return childrenMap[label]
+}
+
 function buildBranch(
   label: string,
   path: number[],
   childrenMap: ChildrenMap,
+  parentLabel?: string,
 ): TreeNode {
   const id = makeId(path)
-  const childLabels = childrenMap[label]
+  const childLabels = getChildLabels(label, parentLabel, childrenMap)
 
   if (!childLabels?.length) {
     return { id, label }
@@ -20,7 +37,7 @@ function buildBranch(
     id,
     label,
     children: childLabels.map((childLabel, index) =>
-      buildBranch(childLabel, [...path, index], childrenMap),
+      buildBranch(childLabel, [...path, index], childrenMap, label),
     ),
   }
 }
@@ -29,7 +46,9 @@ export function buildTreeFromConfig(
   rootItems: readonly string[],
   childrenMap: ChildrenMap,
 ): TreeNode[] {
-  return rootItems.map((label, index) => buildBranch(label, [index], childrenMap))
+  return rootItems.map((label, index) =>
+    buildBranch(label, [index], childrenMap),
+  )
 }
 
 export function findNodeByPath(

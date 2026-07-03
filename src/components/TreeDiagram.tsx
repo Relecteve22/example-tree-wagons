@@ -1,37 +1,108 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ROOT_ITEMS, TREE_CHILDREN } from '../data/treeConfig'
 import type { TreeNode } from '../types/tree'
+import { buildTreeFromConfig, isListNode } from '../utils/buildTree'
 import {
-  buildTreeFromConfig,
-  findNodeByPath,
-  isListNode,
-} from '../utils/buildTree'
-import { clientPointToLocal } from '../utils/layoutCoords'
+  captureBranchPositions,
+  runBranchFlipAnimation,
+  TREE_ANIMATION_MS,
+} from '../utils/treeAnimation'
+import { measureEdgeLines, type EdgeLine } from '../utils/treeEdgeLayout'
 import { ItemListBox } from './ItemListBox'
-import { TreeEdges, type EdgeConnection } from './TreeEdges'
+import { TreeEdges, type TreeEdgesHandle } from './TreeEdges'
+import type { EdgeConnection } from '../utils/treeEdgeLayout'
 import './TreeDiagram.css'
 
 type TreeDiagramProps = {
   roots?: TreeNode[]
 }
 
-function buildVisibleLevels(
-  roots: TreeNode[],
-  expandedPath: string[],
-): TreeNode[][] {
-  const levels: TreeNode[][] = [roots]
-  let currentNodes = roots
+function collectEdgeConnections(
+  nodes: TreeNode[],
+  expandedIds: ReadonlySet<string>,
+): EdgeConnection[] {
+  const connections: EdgeConnection[] = []
 
-  for (const selectedId of expandedPath) {
-    const selectedNode = currentNodes.find((node) => node.id === selectedId)
-    if (!selectedNode?.children?.length || isListNode(selectedNode)) {
-      break
+  const walk = (nodeList: TreeNode[]) => {
+    for (const node of nodeList) {
+      if (!expandedIds.has(node.id) || !node.children?.length) continue
+
+      connections.push({
+        parentId: node.id,
+        childIds: isListNode(node)
+          ? [`${node.id}__list`]
+          : node.children.map((child) => child.id),
+      })
+
+      if (!isListNode(node)) {
+        walk(node.children)
+      }
     }
-    levels.push(selectedNode.children)
-    currentNodes = selectedNode.children
   }
 
-  return levels
+  walk(nodes)
+  return connections
+}
+
+type TreeBranchProps = {
+  node: TreeNode
+  expandedIds: ReadonlySet<string>
+  onToggle: (nodeId: string) => void
+}
+
+function TreeBranch({ node, expandedIds, onToggle }: TreeBranchProps) {
+  const isExpanded = expandedIds.has(node.id)
+  const hasChildren = Boolean(node.children?.length)
+  const showList = isExpanded && hasChildren && isListNode(node)
+  const showSubtree = isExpanded && hasChildren && !isListNode(node)
+
+  return (
+    <div className="tree-branch">
+      <button
+        type="button"
+        className={[
+          'tree-node',
+          isExpanded ? 'tree-node--expanded' : '',
+          hasChildren ? 'tree-node--clickable' : 'tree-node--empty',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        data-node-id={node.id}
+        disabled={!hasChildren}
+        onClick={() => onToggle(node.id)}
+      >
+        {node.label}
+      </button>
+
+      {showSubtree && (
+        <div className="tree-subtree">
+          <div className="tree-level" role="group">
+            {node.children!.map((child) => (
+              <TreeBranch
+                key={child.id}
+                node={child}
+                expandedIds={expandedIds}
+                onToggle={onToggle}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {showList && (
+        <div className="tree-list-block">
+          <ItemListBox
+            listNodeId={`${node.id}__list`}
+            items={node.children!.map((child) => ({
+              id: child.id,
+              label: child.label,
+            }))}
+            parentId={node.id}
+          />
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function TreeDiagram({ roots }: TreeDiagramProps) {
@@ -40,74 +111,103 @@ export function TreeDiagram({ roots }: TreeDiagramProps) {
     [roots],
   )
 
-  const [expandedPath, setExpandedPath] = useState<string[]>([])
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
+  const [edgeLines, setEdgeLines] = useState<EdgeLine[]>([])
+  const [edgeSize, setEdgeSize] = useState({ width: 0, height: 0 })
+
   const diagramRef = useRef<HTMLDivElement>(null)
-  const listBlockRef = useRef<HTMLDivElement>(null)
-  const [listOffset, setListOffset] = useState(0)
+  const edgesRef = useRef<TreeEdgesHandle>(null)
+  const flipBeforeRef = useRef<Map<Element, DOMRect> | null>(null)
+  const edgeFrameRef = useRef<number | null>(null)
 
-  const levels = buildVisibleLevels(tree, expandedPath)
+  const edgeConnections = useMemo(
+    () => collectEdgeConnections(tree, expandedIds),
+    [tree, expandedIds],
+  )
 
-  const listParent =
-    expandedPath.length > 0 ? findNodeByPath(tree, expandedPath) : null
+  const remeasureEdges = useCallback(
+    (commit = true) => {
+      const diagram = diagramRef.current
+      if (!diagram) return
 
-  const listItems =
-    listParent && isListNode(listParent)
-      ? listParent.children!.map((child) => child.label)
-      : null
+      const lines = measureEdgeLines(diagram, edgeConnections)
+      const size = {
+        width: diagram.offsetWidth,
+        height: diagram.offsetHeight,
+      }
 
-  const edgeConnections = useMemo<EdgeConnection[]>(() => {
-    const connections: EdgeConnection[] = []
+      edgesRef.current?.update(lines, size.width, size.height)
 
-    for (let levelIndex = 1; levelIndex < levels.length; levelIndex++) {
-      const parentId = expandedPath[levelIndex - 1]
-      if (!parentId) continue
-
-      connections.push({
-        parentId,
-        childIds: levels[levelIndex].map((node) => node.id),
-      })
-    }
-
-    if (listItems && listParent) {
-      connections.push({
-        parentId: listParent.id,
-        childIds: [`${listParent.id}__list`],
-      })
-    }
-
-    return connections
-  }, [levels, expandedPath, listItems, listParent])
+      if (commit) {
+        setEdgeLines(lines)
+        setEdgeSize(size)
+      }
+    },
+    [edgeConnections],
+  )
 
   useLayoutEffect(() => {
-    if (!listParent || !diagramRef.current || !listBlockRef.current) {
-      setListOffset(0)
-      return
+    const diagram = diagramRef.current
+    if (!diagram) return
+
+    const before = flipBeforeRef.current
+    flipBeforeRef.current = null
+
+    if (before) {
+      runBranchFlipAnimation(diagram, before)
     }
 
-    const parent = diagramRef.current.querySelector<HTMLElement>(
-      `[data-node-id="${listParent.id}"]`,
-    )
-    if (!parent) return
+    remeasureEdges()
 
-    const diagram = diagramRef.current
-    const parentRect = parent.getBoundingClientRect()
-    const parentCenter = clientPointToLocal(
-      diagram,
-      parentRect.left + parentRect.width / 2,
-      parentRect.top,
-    )
+    if (edgeFrameRef.current !== null) {
+      cancelAnimationFrame(edgeFrameRef.current)
+    }
 
-    // List block is centered in the diagram via flex; marginLeft shifts from that point.
-    setListOffset(parentCenter.x - diagram.offsetWidth / 2)
-  }, [listParent, levels, expandedPath])
+    const animationEnd = performance.now() + TREE_ANIMATION_MS
+    const tick = (now: number) => {
+      remeasureEdges(false)
 
-  const handleNodeClick = (node: TreeNode, levelIndex: number) => {
-    setExpandedPath((prev) => {
-      if (prev[levelIndex] === node.id) {
-        return prev.slice(0, levelIndex)
+      if (now < animationEnd) {
+        edgeFrameRef.current = requestAnimationFrame(tick)
+      } else {
+        edgeFrameRef.current = null
+        remeasureEdges()
       }
-      const next = prev.slice(0, levelIndex)
-      next[levelIndex] = node.id
+    }
+
+    if (before) {
+      edgeFrameRef.current = requestAnimationFrame(tick)
+    }
+
+    const handleResize = () => remeasureEdges()
+
+    const observer = new ResizeObserver(handleResize)
+    observer.observe(diagram)
+    window.addEventListener('resize', handleResize)
+
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', handleResize)
+      if (edgeFrameRef.current !== null) {
+        cancelAnimationFrame(edgeFrameRef.current)
+        edgeFrameRef.current = null
+      }
+    }
+  }, [expandedIds, remeasureEdges])
+
+  const handleToggle = (nodeId: string) => {
+    const diagram = diagramRef.current
+    if (diagram) {
+      flipBeforeRef.current = captureBranchPositions(diagram)
+    }
+
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(nodeId)) {
+        next.delete(nodeId)
+      } else {
+        next.add(nodeId)
+      }
       return next
     })
   }
@@ -115,56 +215,22 @@ export function TreeDiagram({ roots }: TreeDiagramProps) {
   return (
     <div className="tree-diagram" ref={diagramRef}>
       <TreeEdges
-        diagramRef={diagramRef}
-        connections={edgeConnections}
-        layoutKey={listOffset}
+        ref={edgesRef}
+        lines={edgeLines}
+        width={edgeSize.width}
+        height={edgeSize.height}
       />
 
-      {levels.map((nodes, levelIndex) => (
-        <div key={`level-${levelIndex}`} className="tree-level-block">
-          <div
-            className="tree-level"
-            data-level={levelIndex + 1}
-            role="group"
-            aria-label={`Уровень ${levelIndex + 1}`}
-          >
-            {nodes.map((node) => {
-              const isExpanded = expandedPath[levelIndex] === node.id
-              const hasChildren = Boolean(node.children?.length)
-
-              return (
-                <button
-                  key={node.id}
-                  type="button"
-                  className={[
-                    'tree-node',
-                    isExpanded ? 'tree-node--expanded' : '',
-                    hasChildren ? 'tree-node--clickable' : 'tree-node--empty',
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}
-                  data-node-id={node.id}
-                  disabled={!hasChildren}
-                  onClick={() => handleNodeClick(node, levelIndex)}
-                >
-                  {node.label}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      ))}
-
-      {listItems && listParent && (
-        <div
-          ref={listBlockRef}
-          className="tree-level-block tree-level-block--list"
-          data-node-id={`${listParent.id}__list`}
-          style={{ marginLeft: listOffset }}
-        >
-          <ItemListBox items={listItems} parentId={listParent.id} />
-        </div>
-      )}
+      <div className="tree-level tree-level--root" role="group" aria-label="Корень">
+        {tree.map((node) => (
+          <TreeBranch
+            key={node.id}
+            node={node}
+            expandedIds={expandedIds}
+            onToggle={handleToggle}
+          />
+        ))}
+      </div>
     </div>
   )
 }

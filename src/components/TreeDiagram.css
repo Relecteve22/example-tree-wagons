@@ -11,7 +11,8 @@
   flex-direction: column;
   align-items: center;
   gap: 0;
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   padding: 32px 20px 48px;
   box-sizing: border-box;
 }
@@ -29,30 +30,68 @@
   fill: none;
   stroke: var(--connector);
   stroke-width: 2;
+  pointer-events: stroke;
+  transition: opacity 0.25s ease;
 }
 
-.tree-level-block {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.tree-level-block--list {
-  align-items: flex-start;
-  width: min(420px, calc(100% - 24px));
+@media (prefers-reduced-motion: reduce) {
+  .tree-level,
+  .tree-subtree,
+  .tree-list-block {
+    animation: none;
+    transition: none;
+  }
 }
 
 .tree-level {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: row;
+  flex-wrap: nowrap;
   justify-content: center;
   align-items: flex-start;
   gap: 16px 20px;
+  transition: gap 0.42s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tree-level--root {
+  position: relative;
+  z-index: 1;
   width: 100%;
-  padding: 8px 0 28px;
+}
+
+.tree-branch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  will-change: transform, opacity;
+}
+
+.tree-subtree {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 28px;
+  animation: tree-reveal 0.42s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.tree-list-block {
+  padding-top: 28px;
+  width: min(420px, 90vw);
+  box-sizing: border-box;
+  animation: tree-reveal 0.42s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@keyframes tree-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .tree-node {
@@ -67,6 +106,8 @@
   line-height: 1.35;
   text-align: center;
   cursor: default;
+  position: relative;
+  z-index: 2;
   transition:
     background 0.15s ease,
     border-color 0.15s ease,
@@ -105,6 +146,9 @@
   background: var(--list-blue-bg);
   padding: 14px 16px 16px;
   box-sizing: border-box;
+  position: relative;
+  z-index: 2;
+  cursor: default;
 }
 
 .item-list {
@@ -134,12 +178,16 @@
     padding: 20px 12px 32px;
   }
 
+  .tree-level {
+    flex-wrap: wrap;
+  }
+
   .tree-node {
     max-width: 100%;
     font-size: 13px;
   }
 
-  .tree-level-block--list {
+  .tree-list-block {
     max-width: 100%;
   }
 }

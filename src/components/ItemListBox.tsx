@@ -1,15 +1,25 @@
-type ItemListBoxProps = {
-  items: string[]
-  parentId: string
+export type ListItem = {
+  id: string
+  label: string
 }
 
-export function ItemListBox({ items, parentId }: ItemListBoxProps) {
+type ItemListBoxProps = {
+  items: ListItem[]
+  parentId: string
+  listNodeId: string
+}
+
+export function ItemListBox({ items, parentId, listNodeId }: ItemListBoxProps) {
   return (
-    <div className="item-list-box" data-parent-id={parentId}>
+    <div
+      className="item-list-box"
+      data-node-id={listNodeId}
+      data-parent-id={parentId}
+    >
       <ul className="item-list">
         {items.map((item) => (
-          <li key={item} className="item-list__row">
-            <span className="item-list__label">{item}</span>
+          <li key={item.id} className="item-list__row">
+            <span className="item-list__label">{item.label}</span>
           </li>
         ))}
       </ul>
